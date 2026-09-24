@@ -1,4 +1,4 @@
-```python
+
 import os
 from pathlib import Path
 
@@ -674,4 +674,4 @@ with right:
         '</div>',
         unsafe_allow_html=True
     )
-```
+
