@@ -8,7 +8,7 @@ Draw a digit on the canvas and the app continuously updates the predicted digit,
 
 - `app.py` - Streamlit application
 - `mnist_cnn_model.keras` - Trained MNIST CNN model
-- `cv1.ipynb` - Notebook used to train the model
+- `main mnist_cnn_model****.ipynb` - Notebook used to train the model
 - `requirements.txt` - Python dependencies
 
 ## Requirements
