@@ -1,4 +1,4 @@
-
+```python
 import os
 from pathlib import Path
 
@@ -42,23 +42,32 @@ def load_model():
 
 
 def preprocess_canvas(image_data: np.ndarray) -> np.ndarray:
-    grayscale = Image.fromarray(
-        image_data.astype("uint8"),
-        mode="RGBA"
+    """
+    Convert canvas RGBA image into MNIST format:
+    (1, 28, 28, 1)
+    """
+
+    # The canvas is black background with white drawing.
+    # Convert RGBA -> grayscale.
+    image = Image.fromarray(
+        image_data.astype(np.uint8),
+        "RGBA"
     ).convert("L")
 
-    pixels = np.asarray(grayscale, dtype="uint8")
+    pixels = np.asarray(image, dtype=np.uint8)
 
+    # Find the actual white/gray drawing.
     ink = pixels > 20
 
     if not np.any(ink):
         return np.zeros(
             (1, 28, 28, 1),
-            dtype="float32"
+            dtype=np.float32
         )
 
     rows, columns = np.where(ink)
 
+    # Crop the digit.
     cropped = Image.fromarray(
         pixels[
             rows.min():rows.max() + 1,
@@ -66,11 +75,12 @@ def preprocess_canvas(image_data: np.ndarray) -> np.ndarray:
         ]
     )
 
+    # Resize digit while keeping it around 20 pixels.
     scale = 20 / max(cropped.size)
 
-    digit_size = tuple(
-        max(1, round(value * scale))
-        for value in cropped.size
+    digit_size = (
+        max(1, round(cropped.width * scale)),
+        max(1, round(cropped.height * scale))
     )
 
     digit = cropped.resize(
@@ -78,6 +88,7 @@ def preprocess_canvas(image_data: np.ndarray) -> np.ndarray:
         Image.Resampling.LANCZOS
     )
 
+    # Center inside 28x28.
     centered = Image.new(
         "L",
         (28, 28),
@@ -94,35 +105,80 @@ def preprocess_canvas(image_data: np.ndarray) -> np.ndarray:
         position
     )
 
+    # Normalize.
     normalized = (
-        np.asarray(centered, dtype="float32") / 255.0
+        np.asarray(centered, dtype=np.float32) / 255.0
     )
 
-    return normalized[np.newaxis, ..., np.newaxis]
+    return normalized[
+        np.newaxis,
+        ...,
+        np.newaxis
+    ]
 
 
 def predict(image_data: np.ndarray) -> np.ndarray:
+
     model_input = preprocess_canvas(image_data)
 
+    model = load_model()
+
     probabilities = np.asarray(
-        load_model().predict(
+        model.predict(
             model_input,
             verbose=0
         )[0],
-        dtype="float32"
+        dtype=np.float32
     )
 
     total = probabilities.sum()
 
-    if total <= 0:
-        return np.zeros(10, dtype="float32")
+    if total == 0:
+        return np.zeros(
+            10,
+            dtype=np.float32
+        )
 
     return probabilities / total
 
 
+def get_canvas_image(canvas):
+    """
+    Safely retrieve image data from streamlit-drawable-canvas.
+
+    Some versions throw RuntimeError when no drawing has been
+    created yet, so we catch that here.
+    """
+
+    try:
+        image_data = canvas.image_data
+
+        if image_data is None:
+            return None
+
+        if not isinstance(image_data, np.ndarray):
+            return None
+
+        if image_data.ndim != 3:
+            return None
+
+        return image_data
+
+    except RuntimeError:
+        return None
+
+    except Exception:
+        return None
+
+
+# ============================================================
+# CSS
+# ============================================================
+
 st.markdown(
     """
     <style>
+
     @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
 
     :root {
@@ -292,7 +348,6 @@ st.markdown(
     }
 
     .bar-row.active {
-        font-weight: 500;
         color: var(--green);
     }
 
@@ -364,14 +419,22 @@ st.markdown(
             padding: 16px;
         }
     }
+
     </style>
     """,
     unsafe_allow_html=True,
 )
 
 
+# ============================================================
+# HEADER
+# ============================================================
+
 st.markdown(
-    '<div class="brand"><span class="brand-mark">✦</span><span class="brand-name">Digit Lens</span></div>',
+    '<div class="brand">'
+    '<span class="brand-mark">✦</span>'
+    '<span class="brand-name">Digit Lens</span>'
+    '</div>',
     unsafe_allow_html=True
 )
 
@@ -386,17 +449,31 @@ st.markdown(
 )
 
 st.markdown(
-    '<p class="intro">A live window into your MNIST classifier. Every brush stroke is translated into a prediction as you draw.</p>',
+    '<p class="intro">'
+    'A live window into your MNIST classifier. '
+    'Every brush stroke is translated into a prediction as you draw.'
+    '</p>',
     unsafe_allow_html=True
 )
 
 
+# ============================================================
+# LOAD MODEL
+# ============================================================
+
 try:
     load_model()
+
 except Exception as error:
-    st.error(f"Could not load the CNN model: {error}")
+    st.error(
+        f"Could not load the CNN model: {error}"
+    )
     st.stop()
 
+
+# ============================================================
+# CANVAS
+# ============================================================
 
 if "canvas_version" not in st.session_state:
     st.session_state.canvas_version = 0
@@ -411,7 +488,10 @@ left, right = st.columns(
 with left:
 
     st.markdown(
-        '<div class="panel-heading"><span class="panel-title">Your canvas</span><span class="panel-meta">28 × 28 INPUT</span></div>',
+        '<div class="panel-heading">'
+        '<span class="panel-title">Your canvas</span>'
+        '<span class="panel-meta">28 × 28 INPUT</span>'
+        '</div>',
         unsafe_allow_html=True
     )
 
@@ -449,6 +529,10 @@ with left:
     )
 
 
+# ============================================================
+# PREDICTION
+# ============================================================
+
 with right:
 
     st.markdown(
@@ -456,34 +540,46 @@ with right:
         unsafe_allow_html=True
     )
 
-    image_data = None
+    image_data = get_canvas_image(canvas)
 
-    try:
-        image_data = canvas.image_data
-    except RuntimeError:
-        image_data = None
-    except Exception:
-        image_data = None
+    # Important:
+    # streamlit-drawable-canvas can return an image even when
+    # nothing has been drawn. We therefore check the alpha
+    # channel AND the RGB pixels.
 
-    has_drawing = (
-        isinstance(image_data, np.ndarray)
-        and image_data.ndim >= 3
-        and image_data.shape[-1] >= 4
-        and np.any(image_data[:, :, 3] > 0)
-    )
+    has_drawing = False
+
+    if image_data is not None:
+
+        # Canvas returns RGBA.
+        # The background is black with alpha 255.
+        #
+        # Therefore checking alpha alone is NOT enough.
+        # We check whether the RGB portion contains white ink.
+
+        rgb = image_data[:, :, :3]
+
+        has_drawing = np.any(
+            rgb > 20
+        )
+
 
     if has_drawing:
 
         try:
-            probabilities = predict(image_data)
+            probabilities = predict(
+                image_data
+            )
 
         except Exception as error:
 
-            st.error(f"Prediction failed: {error}")
+            st.error(
+                f"Prediction failed: {error}"
+            )
 
             probabilities = np.zeros(
                 10,
-                dtype="float32"
+                dtype=np.float32
             )
 
             probabilities[0] = 1.0
@@ -494,7 +590,7 @@ with right:
 
         probabilities = np.zeros(
             10,
-            dtype="float32"
+            dtype=np.float32
         )
 
         probabilities[0] = 1.0
@@ -514,28 +610,42 @@ with right:
         else "Ready to recognize"
     )
 
+
     st.markdown(
         f'<div class="result-label">{label}</div>'
         f'<div class="digit">{predicted_digit}</div>'
         f'<div class="confidence">'
-        f'<span class="confidence-value">{confidence * 100:.1f}%</span>'
-        f'<span class="confidence-text">confidence</span>'
+        f'<span class="confidence-value">'
+        f'{confidence * 100:.1f}%'
+        f'</span>'
+        f'<span class="confidence-text">'
+        f'confidence'
+        f'</span>'
         f'</div>',
         unsafe_allow_html=True
     )
 
+
     st.markdown(
-        '<div class="bars-title">Probability distribution</div>',
+        '<div class="bars-title">'
+        'Probability distribution'
+        '</div>',
         unsafe_allow_html=True
     )
 
+
     bars = []
 
-    for digit, probability in enumerate(probabilities):
+    for digit, probability in enumerate(
+        probabilities
+    ):
 
         active = (
             " active"
-            if digit == predicted_digit and has_drawing
+            if (
+                digit == predicted_digit
+                and has_drawing
+            )
             else ""
         )
 
@@ -543,11 +653,17 @@ with right:
             f'<div class="bar-row{active}">'
             f'<span>{digit}</span>'
             f'<div class="bar-track">'
-            f'<div class="bar-fill" style="width: {probability * 100:.2f}%"></div>'
+            f'<div class="bar-fill" '
+            f'style="width: '
+            f'{probability * 100:.2f}%">'
             f'</div>'
-            f'<span class="bar-percent">{probability * 100:.1f}%</span>'
+            f'</div>'
+            f'<span class="bar-percent">'
+            f'{probability * 100:.1f}%'
+            f'</span>'
             f'</div>'
         )
+
 
     st.markdown(
         "".join(bars),
@@ -558,4 +674,4 @@ with right:
         '</div>',
         unsafe_allow_html=True
     )
-
+```
