@@ -138,7 +138,12 @@ with left:
 
 with right:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    if canvas.image_data is None or not np.any(canvas.image_data[:, :, 3] > 0):
+    if (
+        canvas.image_data is None
+        or not isinstance(canvas.image_data, np.ndarray)
+        or canvas.image_data.ndim < 3
+        or not np.any(canvas.image_data[:, :, 3] > 0)
+    ):
         probabilities = np.zeros(10, dtype="float32")
         probabilities[0] = 1.0
         has_drawing = False
