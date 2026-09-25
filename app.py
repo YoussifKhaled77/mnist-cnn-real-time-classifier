@@ -127,7 +127,7 @@ with left:
         height=CANVAS_SIZE,
         width=CANVAS_SIZE,
         drawing_mode="freedraw",
-        display_toolbar=False,
+        return_image_data=True,
         key=f"canvas-{st.session_state.canvas_version}",
     )
     st.markdown('</div>', unsafe_allow_html=True)
